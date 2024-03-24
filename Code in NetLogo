@@ -1,0 +1,124 @@
+; to plot the results in R, I changed "percent-similar" to "percentsimilar" when creating the csv file
+globals [
+  percent-similar  ; on the average, what percent of a turtle's neighbors
+                   ; are the same color as that turtle?
+  percent-unhappy  ; what percent of the turtles are unhappy?
+]
+
+turtles-own [
+  happy?           ; for each turtle, indicates whether at least %-similar-wanted percent of
+                   ;   that turtle's neighbors are the same color as the turtle
+  similar-nearby   ; how many neighboring patches have a turtle with my color?
+  other-nearby     ; how many have a turtle of another color?
+  total-nearby     ; sum of previous two variables
+  my-contacts      ; create a list to store the id(who) of my contacts
+]
+
+to setup
+  clear-all
+  ; create turtles on random patches.
+  ask patches [
+
+    set pcolor white
+    if random 100 < density [   ; set the occupancy density
+      sprout 1 [
+        ; 105 is the color number for "blue"
+        ; 27 is the color number for "orange"
+        set color one-of [105 27]
+        set size 1
+      ]
+    ]
+  ]
+
+  ; find others who stand on my 8 neighbor patches and have the same color as me
+  ; create links with them
+  ask turtles [
+    create-links-with (other turtles-on neighbors) with [color = [color] of myself]
+    set my-contacts [who] of (other turtles-on neighbors) with [color = [color] of myself]    ; fill my-contacts with id(who)
+    ask links [set hidden? true]      ; hide the links
+  ]
+
+  update-turtles
+  update-globals
+  reset-ticks
+end
+
+; run the model for one tick
+to go
+  if(ticks = 100)[stop]   ; do 100 ticks
+  ;if (all? turtles [ happy? ])[stop]
+  move-unhappy-turtles
+  update-turtles
+  update-globals
+  tick
+end
+
+; unhappy turtles try a new spot
+to move-unhappy-turtles
+  ;ask one-of turtles with [ not happy? ]   ; I used this when checking if the agents act based on one of the movement strategy("move-to-friend" or "random-move")
+  ask turtles with [ not happy? ]
+    [ find-new-spot ]
+end
+
+; move until we find an unoccupied spot
+to find-new-spot
+  ifelse length my-contacts != 0   ; if this agent has any contact, do move-to-friend. Or, start to do random-move
+  [move-to-friend]
+  [random-move]
+end
+
+to move-to-friend
+    let contact-id one-of my-contacts   ; choose one id from the list "my-contacts"
+    let friend turtle contact-id     ; name that agent "friend"
+  ask friend [
+    let empty-patch neighbors with [not any? turtles-here]   ; ask "friend" to check if there is any empty neighbor patches
+    if any? empty-patch[
+      ask empty-patch [set pcolor red]  ; if there are such patches available, set these patches red
+    ]
+  ]
+
+  ifelse any? patches with [pcolor = red]   ; for the turtle that asked the friend and wants to move ; check if there is any red patch in the environment
+  [ let available one-of (patches with [pcolor = red])  ; if TRUE, randomly choose a red patch and move to it
+    move-to available
+    output-print (word "Person " who " moved to a friend " contact-id " on tick " ticks)   ; show that this agent moved based on the recommendation of a friend
+    ask patches with [pcolor = red] [set pcolor white]  ; reset the color of all red patches to avoid confusion
+    stop
+  ]
+  [random-move]                                        ; if FALSE, do random-move
+
+end
+
+to random-move
+  rt random-float 360
+  fd random-float 10
+  if any? other turtles-here [ random-move ] ; keep random moving(instead of "find-new-spot" as in the original model) until we find an unoccupied patch
+  move-to patch-here                         ; move to center of patch
+  output-print (word "Person " who " moved randomly on tick " ticks)   ; show that this agent did "random-move"
+end
+
+to update-turtles
+  ask turtles [
+    ; in next two lines, we use "neighbors" to test the eight patches
+    ; surrounding the current patch
+    set similar-nearby count (turtles-on neighbors)  with [ color = [ color ] of myself ]
+    set other-nearby count (turtles-on neighbors) with [ color != [ color ] of myself ]
+    set total-nearby similar-nearby + other-nearby
+    set happy? similar-nearby >= (%-similar-wanted * total-nearby / 100)
+    ; add visualization here
+    if visualization = "old" [ set shape "default" set size 1.3 ]
+    if visualization = "square-x" [
+      ifelse happy? [ set shape "square" ] [ set shape "X" ]
+    ]
+  ]
+end
+
+to update-globals
+  let similar-neighbors sum [ similar-nearby ] of turtles
+  let total-neighbors sum [ total-nearby ] of turtles
+  set percent-similar (similar-neighbors / total-neighbors) * 100
+  set percent-unhappy (count turtles with [ not happy? ]) / (count turtles) * 100
+end
+
+
+; Copyright 1997 Uri Wilensky.
+; See Info tab for full copyright and license.
